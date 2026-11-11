@@ -1,5 +1,6 @@
 "use strict";
-const dailyCharts = Boolean(document.querySelector('script[src="./app.js?v=daily"]'));
+const exactTradingDates = document.getElementById("start-date").type === "date";
+const dailyCharts = exactTradingDates || Boolean(document.querySelector('script[src="./app.js?v=daily"]'));
 const pools = {
   "carri2": {
     "groups": [
@@ -539,7 +540,7 @@ function marker(color) {
   return dot;
 }
 const pct = value => (100 * value).toFixed(2) + "%";
-const coverage = {start:"2018-02",end:"2026-09"};
+const coverage = exactTradingDates ? {start:"2018-02-01",end:"2026-09-10"} : {start:"2018-02",end:"2026-09"};
 const assetNames = pool => pools[pool].groups.flatMap(([,members]) => members.map(([name]) => name));
 const allIndexes = pool => assetNames(pool).map((_,i) => i);
 const layerNames = {pool:"A 资产池", signal:"B 信号", risk:"C 风险建模", weight:"D 资本配置", scale:"E 交易执行"};
@@ -727,7 +728,7 @@ function duplicateRow(source) {
 function sharedSettings() {
   const start = byId("start-date").value, end = byId("end-date").value, fee = byId("fee").valueAsNumber;
   if (!start || !end || start < coverage.start || end > coverage.end || start >= end) {
-    throw new Error("请选择共同覆盖范围内至少两个月。");
+    throw new Error(exactTradingDates ? "请选择共同覆盖范围内的起止交易日，起始日期须早于结束日期。" : "请选择共同覆盖范围内至少两个月。");
   }
   if (!Number.isFinite(fee) || fee < 0 || fee > 100) throw new Error("单边成本请输入 0–100 bp。");
   return {start,end,fee};
@@ -776,7 +777,7 @@ async function backtestEndpoint() {
         if (typeof origin !== "string" || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) {
           throw new Error("本机回测入口尚未配置，请稍后重试。");
         }
-        return origin + (dailyCharts ? "/api/backtest?view=daily" : "/api/backtest");
+        return origin + (dailyCharts ? "/api/backtest?view=daily" : "/api/backtest") + (exactTradingDates ? "&dates=exact" : "");
       })
       .finally(() => { routeRequest = null; });
   }
