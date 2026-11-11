@@ -1,4 +1,5 @@
 "use strict";
+const dailyCharts = Boolean(document.querySelector('script[src="./app.js?v=daily"]'));
 const pools = {
   "carri2": {
     "groups": [
@@ -440,7 +441,7 @@ function makeComparisonChart() {
     for (const panel of panels) drawPanel(panel);
     tooltip.hidden = active === null;
     if (active !== null && pointerPanel.plot) {
-      tooltip.replaceChildren(make("strong",rows[active].date + " · 月末净值 / 月内最深回撤"));
+      tooltip.replaceChildren(make("strong",rows[active].date + (dailyCharts ? " · 净值 / 回撤" : " · 月末净值 / 月内最深回撤")));
       for (const item of series) {
         const point = item.points[active], entry = make("div","","tip-row");
         const title = make("span",item.name,"tip-name");
@@ -775,7 +776,7 @@ async function backtestEndpoint() {
         if (typeof origin !== "string" || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) {
           throw new Error("本机回测入口尚未配置，请稍后重试。");
         }
-        return origin + "/api/backtest";
+        return origin + (dailyCharts ? "/api/backtest?view=daily" : "/api/backtest");
       })
       .finally(() => { routeRequest = null; });
   }
