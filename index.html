@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.trycloudflare.com; img-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>多资产投资组合 · 五层策略对比</title>
+<style>
+:root {
+  --ink:#122235; --muted:#566c80; --line:#dce5ea; --paper:#f4f7f5;
+  --white:#fff; --navy:#102c45; --teal:#0a7c78; --teal-soft:#dff2ee;
+  --gold:#b08646; --gold-soft:#fbf5e7; --shadow:0 5px 16px rgb(18 43 64 / .05);
+}
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.5 Inter,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+h1,h2,h3,h4,p { margin:0; }
+button,input,select,textarea { font:inherit; }
+button,select,input[type=checkbox] { cursor:pointer; }
+input[type=checkbox] { accent-color:var(--teal); }
+:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+header { background:var(--navy); color:var(--white); }
+.wrap { width:min(1640px,100%); padding-inline:clamp(12px,2.2vw,34px); margin:auto; }
+.header-content { padding-block:14px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+h1,h2 { font-family:Georgia,"Songti SC","Noto Serif CJK SC","SimSun",serif; }
+h1 { font-size:clamp(22px,2.65vw,34px); line-height:1.25; }
+h2 { font-size:20px; color:var(--navy); }
+.header-content a { color:#dbebf1; text-underline-offset:4px; font-size:13px; white-space:nowrap; }
+main.wrap { padding-block:14px 26px; }
+.panel { margin-bottom:12px; min-width:0; border:1px solid var(--line); border-radius:8px; background:var(--white); box-shadow:var(--shadow); }
+.panel-head { padding:11px 14px; display:flex; justify-content:space-between; gap:8px 14px; flex-wrap:wrap; align-items:center; }
+.panel-head h2 { line-height:1.25; }
+.help,.hint { color:var(--muted); font-size:12px; }
+.panel-head .help { margin-top:3px; }
+.actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.button { min-height:33px; border:1px solid var(--line); border-radius:5px; padding:4px 9px; background:var(--white); color:var(--navy); font-size:12px; font-weight:700; white-space:nowrap; }
+.button.primary { color:var(--white); background:var(--teal); border-color:var(--teal); }
+.button:hover { color:var(--teal); border-color:var(--teal); }
+.button.primary:hover { color:var(--white); background:#086a66; }
+.button:disabled { color:var(--muted); background:#f1f4f4; border-color:var(--line); opacity:.7; cursor:default; }
+.table-scroll { overflow-x:auto; min-width:0; }
+table { width:100%; border-collapse:collapse; text-align:left; }
+.strategies { table-layout:fixed; min-width:1010px; }
+.strategies col.compare-col { width:52px; }
+.strategies col.name-col { width:clamp(158px,13vw,205px); }
+.strategies col.action-col { width:105px; }
+.strategies thead,.metrics thead { color:var(--navy); background:#edf3f4; }
+.strategies th,.strategies td { padding:7px 8px; border-bottom:1px solid var(--line); border-right:1px solid #e8eef0; vertical-align:top; }
+.strategies th:last-child,.strategies td:last-child { border-right:0; }
+.strategies tbody tr:last-child td { border-bottom:0; }
+.strategies th { font-size:12px; font-weight:700; white-space:nowrap; }
+.strategies th:target { box-shadow:inset 0 -2px var(--teal); }
+.strategies td.compare-cell,.strategies th:first-child { text-align:center; }
+.strategies td.compare-cell { padding-top:13px; }
+.strategies input[type=checkbox] { width:15px; height:15px; margin:0; }
+.name-field { display:flex; align-items:center; gap:6px; }
+.color-mark { display:inline-block; width:10px; height:10px; border-radius:50%; flex:none; }
+.name-field input,.primary-select,select,input[type=number],input[type=date] { width:100%; min-width:0; min-height:31px; border:1px solid #b9cbd1; border-radius:4px; color:var(--ink); background:var(--white); padding:3px 6px; }
+.name-field input { min-height:30px; font-weight:700; }
+.primary-select { font-size:13px; }
+.cell-tail { display:flex; align-items:center; justify-content:space-between; gap:3px; margin-top:4px; min-height:21px; }
+.cell-tail .hint { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+.link-button { flex:none; border:0; padding:1px 2px; color:var(--teal); background:transparent; font-size:11px; text-underline-offset:3px; text-decoration:underline; }
+.link-button:disabled { opacity:.55; cursor:default; }
+.strategies td[data-changed=true] { background:var(--gold-soft); box-shadow:inset 0 2px #e3cc9a; }
+.row-note { margin:3px 0 0 16px; overflow-wrap:anywhere; font-size:11px; color:var(--muted); }
+.row-note[data-state=error] { color:#855017; font-weight:700; }
+.row-actions { display:grid; grid-template-columns:1fr 1fr; gap:2px 3px; }
+.row-actions .button { padding:3px; min-height:26px; font-size:11px; }
+.panel-foot { padding:6px 13px 8px; border-top:1px solid var(--line); }
+.compare-head { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; border-bottom:1px solid var(--line); }
+.mobile-table-hint { display:none; }
+.shared { display:flex; flex-wrap:wrap; align-items:end; gap:8px 13px; padding:8px 14px 9px; }
+.shared label { display:grid; gap:3px; color:var(--navy); font-size:12px; font-weight:700; min-width:0; }
+.shared input[type=date] { width:146px; }
+.shared input[type=number] { width:93px; }
+.shared-status { color:var(--muted); font-size:12px; align-self:end; min-height:26px; }
+.shared-status[data-error=true] { color:#855017; font-weight:700; }
+.comparison-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(350px,.46fr); gap:14px; align-items:start; padding:9px 14px 12px; }
+.plots { min-width:0; }
+.legend { display:flex; flex-wrap:wrap; gap:3px 13px; margin-bottom:5px; min-height:19px; font-size:12px; }
+.legend-item { display:inline-flex; align-items:center; gap:5px; min-width:0; max-width:230px; }
+.legend-item span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plot-title { font-size:13px; color:var(--navy); }
+.plot-host { position:relative; min-width:0; }
+canvas { display:block; width:100%; }
+#nav-curve { height:clamp(180px,25vh,305px); }
+#dd-curve { height:clamp(115px,16vh,195px); }
+.chart-tt { pointer-events:none; position:absolute; z-index:2; min-width:180px; max-width:100%; max-height:275px; overflow:hidden; padding:6px 8px; border:1px solid var(--line); border-radius:5px; background:#ffffffed; color:var(--navy); font-size:12px; box-shadow:var(--shadow); }
+.tip-row { display:grid; grid-template-columns:10px minmax(0,1fr) auto auto; align-items:center; column-gap:5px; line-height:1.55; }
+.tip-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tip-number { font-variant-numeric:tabular-nums; }
+.zoom { padding-inline:2px; }
+.zoom-track { position:relative; height:20px; margin-inline:9px; margin-top:3px; border:1px solid var(--line); border-radius:4px; background:#eef3f4; touch-action:none; }
+.zoom-window { position:absolute; height:100%; inset-block-start:0; background:rgb(10 124 120 / .16); border:1px solid var(--teal); border-radius:3px; cursor:grab; }
+.zoom-handle { position:absolute; top:-3px; width:15px; height:24px; border:1px solid var(--teal); border-radius:4px; background:var(--white); padding:0; color:var(--teal); cursor:ew-resize; font-size:13px; }
+.zoom-handle.left { left:-7px; }
+.zoom-handle.right { right:-7px; }
+.zoom-tick { position:absolute; top:4px; height:7px; border-left:1px solid #9fb0b9; pointer-events:none; }
+.zoom-tick span { position:absolute; top:19px; transform:translateX(-50%); color:var(--muted); font-size:10px; white-space:nowrap; }
+.zoom-info { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:3px; margin-top:17px; color:var(--muted); font-size:12px; }
+.zoom-info .button { min-height:26px; }
+.metrics-box { min-width:0; border:1px solid var(--line); border-radius:6px; padding:8px; background:#f8faf9; }
+.metrics-box h3 { color:var(--navy); font-size:14px; margin:0 0 6px 2px; }
+.metrics { font-size:12px; font-variant-numeric:tabular-nums; }
+.metrics th,.metrics td { border-bottom:1px solid var(--line); padding:6px 5px; text-align:right; }
+.metrics th:first-child,.metrics td:first-child { text-align:left; }
+.metrics td { white-space:nowrap; }
+.metrics td:first-child { white-space:normal; overflow-wrap:anywhere; font-weight:700; }
+.metrics td:first-child .color-mark { margin-right:4px; width:8px; height:8px; }
+.metrics [data-gate=fail] { color:#855017; background:var(--gold-soft); }
+.metrics-box .help { margin:6px 2px 0; }
+.empty { padding:18px 14px; color:var(--muted); font-size:13px; }
+.support { padding:0 14px 8px; }
+.support summary { color:var(--navy); font-weight:700; font-size:13px; cursor:pointer; }
+.support h3 { margin:7px 0 3px; font-size:13px; color:var(--navy); }
+.support ul { margin:6px 0; padding-left:19px; font-size:12px; }
+.support li { margin:3px 0; overflow-wrap:anywhere; }
+.support a,.detail-source a { color:var(--teal); text-underline-offset:3px; }
+dialog { width:min(600px,calc(100vw - 22px)); max-height:calc(100dvh - 28px); border:1px solid var(--line); border-radius:8px; color:var(--ink); padding:14px; }
+dialog::backdrop { background:rgb(16 44 69 / .46); }
+dialog h3 { margin-bottom:7px; color:var(--navy); font-size:17px; overflow-wrap:anywhere; }
+.editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:9px; }
+.editor-field { display:grid; gap:3px; color:var(--navy); font-size:13px; font-weight:600; min-width:0; }
+.detail-notes,.assets,.detail-source { grid-column:1 / -1; }
+.detail-notes { padding:7px 9px; border-left:3px solid var(--teal); background:#f0f6f4; font-size:12px; }
+.detail-notes p + p { margin-top:3px; }
+.detail-source { color:var(--muted); font-size:12px; }
+.assets h4 { margin:6px 0 3px; color:var(--navy); font-size:12px; }
+.assets-items { display:flex; flex-wrap:wrap; gap:4px; }
+.asset { display:inline-flex; align-items:center; gap:4px; font-size:12px; border:1px solid var(--line); padding:3px 6px; border-radius:4px; }
+.editor-actions { margin-top:10px; justify-content:flex-end; }
+.editor-error { color:#855017; font-size:12px; margin-top:5px; }
+dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); padding:8px; margin:0 0 8px; }
+@media(max-width:1120px) {
+  .comparison-body { grid-template-columns:minmax(0,1fr); gap:9px; }
+  .metrics-box { max-width:660px; }
+}
+@media(max-width:1070px) { .mobile-table-hint { display:inline; } }
+@media(max-width:620px) {
+  .header-content a { display:none; }
+  .panel-head,.shared { padding-inline:9px; }
+  .comparison-body { padding-inline:8px; }
+  .panel-foot,.support { padding-inline:8px; }
+  .shared { gap:7px; }
+  .shared input[type=date] { width:133px; }
+  .shared-status { flex-basis:100%; min-height:18px; }
+  .metrics th,.metrics td { padding:5px 3px; font-size:11px; }
+  .tip-row { font-size:11px; }
+}
+</style>
+</head>
+<body>
+<header><div class="wrap header-content">
+  <h1>多资产投资组合 · 五层策略对比</h1>
+  <a href="#support">回测口径</a>
+</div></header>
+<main class="wrap">
+  <section class="panel" aria-labelledby="strategies-title">
+    <div class="panel-head">
+      <div><h2 id="strategies-title">策略配置</h2><p class="help">复制基准行，改一层看差异。浅金色标出相对基准有变化的单元格。</p></div>
+      <button id="copy-baseline" class="button primary" type="button">复制基准行</button>
+    </div>
+    <div class="table-scroll" tabindex="0" aria-label="策略配置表，可横向滚动">
+      <table class="strategies">
+        <colgroup><col class="compare-col"><col class="name-col"><col span="5"><col class="action-col"></colgroup>
+        <thead><tr>
+          <th scope="col">对比</th><th scope="col">方案</th>
+          <th scope="col" id="a">A 资产池</th><th scope="col" id="b">B 信号</th><th scope="col" id="c">C 风险建模</th><th scope="col" id="d">D 资本配置</th><th scope="col" id="e">E 交易执行</th>
+          <th scope="col">操作</th>
+        </tr></thead>
+        <tbody id="strategy-rows"></tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><p class="help">主选项改动后自动回测该行。详细参数在「明细」里编辑，点应用后生效。<span class="mobile-table-hint"> 窄屏可横向滚动策略表。</span></p></div>
+  </section>
+  <section class="panel" id="backtest-results" aria-labelledby="results-title">
+    <div class="compare-head">
+    <div class="panel-head"><div><h2 id="results-title">回测对比</h2><p class="help">服务端计算 · 同一评价期与成本 · 日频含费结算</p></div></div>
+    <div class="shared" aria-label="共用回测设置">
+      <label>起始月份<input type="month" id="start-date" value="2018-02"></label>
+      <label>结束月份<input type="month" id="end-date" value="2026-09"></label>
+      <label>单边成本（bp）<input type="number" id="fee" min="0" max="100" step="0.5" value="5" required></label>
+      <p class="shared-status" id="run-status" role="status"></p>
+    </div>
+    </div>
+    <p class="empty" id="empty-state" hidden></p>
+    <div class="comparison-body" id="comparison-body" hidden>
+      <div class="plots">
+        <div class="legend" id="legend" aria-label="曲线图例"></div>
+        <h3 class="plot-title">月末含费净值</h3>
+        <div class="plot-host" id="nav-host">
+          <canvas id="nav-curve" tabindex="0" role="img" aria-label="各方案月末含费净值。聚焦后用左右方向键逐日查看。"></canvas>
+          <div class="chart-tt" id="chart-tip" hidden></div>
+        </div>
+        <h3 class="plot-title">月内最深回撤</h3>
+        <div class="plot-host" id="dd-host">
+          <canvas id="dd-curve" tabindex="0" role="img" aria-label="各方案月内最深回撤。聚焦后用左右方向键逐日查看。"></canvas>
+        </div>
+        <div class="zoom">
+          <div class="zoom-track" id="zoom-track" aria-label="两图共用时间范围">
+            <div class="zoom-window" id="zoom-window">
+              <button type="button" class="zoom-handle left" data-edge="left" aria-label="调整显示区间起点">‹</button>
+              <button type="button" class="zoom-handle right" data-edge="right" aria-label="调整显示区间终点">›</button>
+            </div>
+          </div>
+          <div class="zoom-info"><span id="zoom-date"></span><button class="button" type="button" id="zoom-reset">回到全区间</button></div>
+        </div>
+      </div>
+      <section class="metrics-box" aria-labelledby="metrics-title">
+        <h3 id="metrics-title">绩效对比</h3>
+        <div class="table-scroll"><table class="metrics"><thead><tr>
+          <th scope="col">方案</th><th scope="col">年化收益</th><th scope="col">年化波动</th><th scope="col">最大回撤</th><th scope="col" title="日实际买入额与卖出额合计，占成交前净值的比例按日加总并按日历年年化">年化双边换手</th>
+        </tr></thead><tbody id="metrics-rows"></tbody></table></div>
+        <p class="help">指标按完整评价期计算。换手按实际买入额与卖出额合计，含初次建仓。</p>
+      </section>
+    </div>
+  </section>
+  <details id="support" class="support">
+    <summary>F 回测口径</summary>
+    <ul>
+      <li>服务端按三套资产池的共同评价区间运行。可选月份为 <span id="coverage"></span>。</li>
+      <li>净值展示每月最后一个估值日，回撤展示该月最深值。尾月估值截至 2026-09-10。最大回撤按完整评价期的连续历史峰值计算。</li>
+      <li>年化双边换手按实际买卖额合计占成交前净值的比例逐日加总，再按日历天数年化，含初次建仓。</li>
+    </ul>
+  </details>
+</main>
+<dialog id="detail-dialog" aria-labelledby="detail-title">
+  <form id="detail-form">
+    <h3 id="detail-title"></h3>
+    <div class="editor-grid" id="editor-grid"></div>
+    <p class="editor-error" id="editor-error" role="status"></p>
+    <div class="actions editor-actions"><button class="button" type="button" id="cancel-detail">取消</button><button class="button primary" type="submit">应用并回测此行</button></div>
+  </form>
+</dialog>
+<dialog id="text-dialog" aria-labelledby="text-title"><form method="dialog">
+  <h3 id="text-title"></h3>
+  <textarea readonly aria-label="待复制内容" spellcheck="false"></textarea>
+  <div class="actions"><button class="button primary" type="button" id="copy-text">复制文本</button><button class="button" type="submit">关闭</button><p class="help" id="copy-status" role="status"></p></div>
+</form></dialog>
+<noscript><p>请启用浏览器 JavaScript 以运行回测。</p></noscript>
+<script src="./app.js" defer></script>
+</body>
+</html>
