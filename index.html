@@ -179,8 +179,8 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
     <div class="compare-head">
     <div class="panel-head"><div><h2 id="results-title">回测对比</h2><p class="help">服务端计算 · 同一评价期与成本 · 日频含费结算</p></div></div>
     <div class="shared" aria-label="共用回测设置">
-      <label>起始月份<input type="month" id="start-date" value="2018-02"></label>
-      <label>结束月份<input type="month" id="end-date" value="2026-09"></label>
+      <label>起始交易日<input type="date" id="start-date" value="2018-02-01"></label>
+      <label>结束交易日<input type="date" id="end-date" value="2026-09-10"></label>
       <label>单边成本（bp）<input type="number" id="fee" min="0" max="100" step="0.5" value="5" required></label>
       <p class="shared-status" id="run-status" role="status"></p>
     </div>
@@ -220,8 +220,8 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
   <details id="support" class="support">
     <summary>F 回测口径</summary>
     <ul>
-      <li>服务端按三套资产池的共同评价区间运行。可选月份为 <span id="coverage"></span>。</li>
-      <li>净值和回撤按交易日展示，均使用含费结果。尾月估值截至 2026-09-10。最大回撤按完整评价期的连续历史峰值计算。</li>
+      <li>服务端按三套资产池的共同评价区间运行。可选日期为 <span id="coverage"></span>。</li>
+      <li>起止日期均须为共同交易日，含首尾两日。曲线在起始日前额外标出净值为 1 的基准点。净值和回撤均使用含费结果。最大回撤按完整评价期的连续历史峰值计算。</li>
       <li>年化双边换手按实际买卖额合计占成交前净值的比例逐日加总，再按日历天数年化，含初次建仓。</li>
     </ul>
   </details>
@@ -240,6 +240,6 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
   <div class="actions"><button class="button primary" type="button" id="copy-text">复制文本</button><button class="button" type="submit">关闭</button><p class="help" id="copy-status" role="status"></p></div>
 </form></dialog>
 <noscript><p>请启用浏览器 JavaScript 以运行回测。</p></noscript>
-<script src="./app.js?v=daily" defer></script>
+<script src="./app.js?v=trading-days" defer></script>
 </body>
 </html>
