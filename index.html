@@ -189,14 +189,14 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
     <div class="comparison-body" id="comparison-body" hidden>
       <div class="plots">
         <div class="legend" id="legend" aria-label="曲线图例"></div>
-        <h3 class="plot-title">月末含费净值</h3>
+        <h3 class="plot-title">日频含费净值</h3>
         <div class="plot-host" id="nav-host">
-          <canvas id="nav-curve" tabindex="0" role="img" aria-label="各方案月末含费净值。聚焦后用左右方向键逐日查看。"></canvas>
+          <canvas id="nav-curve" tabindex="0" role="img" aria-label="各方案日频含费净值。聚焦后用左右方向键逐日查看。"></canvas>
           <div class="chart-tt" id="chart-tip" hidden></div>
         </div>
-        <h3 class="plot-title">月内最深回撤</h3>
+        <h3 class="plot-title">日频回撤</h3>
         <div class="plot-host" id="dd-host">
-          <canvas id="dd-curve" tabindex="0" role="img" aria-label="各方案月内最深回撤。聚焦后用左右方向键逐日查看。"></canvas>
+          <canvas id="dd-curve" tabindex="0" role="img" aria-label="各方案日频回撤。聚焦后用左右方向键逐日查看。"></canvas>
         </div>
         <div class="zoom">
           <div class="zoom-track" id="zoom-track" aria-label="两图共用时间范围">
@@ -221,7 +221,7 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
     <summary>F 回测口径</summary>
     <ul>
       <li>服务端按三套资产池的共同评价区间运行。可选月份为 <span id="coverage"></span>。</li>
-      <li>净值展示每月最后一个估值日，回撤展示该月最深值。尾月估值截至 2026-09-10。最大回撤按完整评价期的连续历史峰值计算。</li>
+      <li>净值和回撤按交易日展示，均使用含费结果。尾月估值截至 2026-09-10。最大回撤按完整评价期的连续历史峰值计算。</li>
       <li>年化双边换手按实际买卖额合计占成交前净值的比例逐日加总，再按日历天数年化，含初次建仓。</li>
     </ul>
   </details>
@@ -240,6 +240,6 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
   <div class="actions"><button class="button primary" type="button" id="copy-text">复制文本</button><button class="button" type="submit">关闭</button><p class="help" id="copy-status" role="status"></p></div>
 </form></dialog>
 <noscript><p>请启用浏览器 JavaScript 以运行回测。</p></noscript>
-<script src="./app.js" defer></script>
+<script src="./app.js?v=daily" defer></script>
 </body>
 </html>
