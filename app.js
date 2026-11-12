@@ -821,18 +821,112 @@ function renderComparison() {
   if (complete.length) chart.setSeries(complete);
 }
 
+const detailRules = {
+  signal:{
+    momentum:["用窗口内的累计收益打分。近期涨幅越大，得分越高。","累计收益 = ∏(1 + 日收益) − 1"],
+    sharpe:["用相对现金的日超额收益衡量风险调整后的强弱。","得分 = √252 × 日超额收益均值 ÷ 日超额收益样本标准差"],
+    reversal:["比较同类资产在同一回看窗口内的表现，落后越多，得分越高。","得分 = 同组资产的平均累计收益 − 本资产累计收益"],
+    ema:["用短、长指数移动平均线的相对位置判断强弱。","得分 = 20 日 EMA ÷ 60 日 EMA − 1"],
+    none:["合格资产直接进入配权。"]
+  },
+  screen:{
+    all:["保留波动率有效且得分有限的资产。"],
+    positive:["只保留得分严格大于 0 的资产。"],
+    top:["按得分从高到低，最多取前 K 条。"],
+    positiveTop:["先剔除零分和负分资产，再从剩余资产中取前 K 条。","示例：得分为 3、1、−2，且 K = 3 时，只入选前两条。"]
+  },
+  risk:{
+    sample:["用最近 60 个交易日收益计算样本协方差。"],
+    split:["用最近 20 个交易日估计各资产波动率，用最近 252 个交易日估计两两相关系数。","协方差 = 短期波动率ᵢ × 短期波动率ⱼ × 长期相关系数ᵢⱼ"],
+    conservative:["比较 EWMA 方差（λ = 0.94）与 20／60／120 日样本方差的均值，取较大值后开方作为波动率。","相关系数使用最近 126 个交易日估计。"],
+    shrink:["用 60 日样本协方差估计风险，保留对角线方差，将非对角线协方差乘以 0.9。"]
+  },
+  weight:{
+    equal:["入选资产等资金配置，每条资产的基础权重为 1 ÷ 入选资产数。"],
+    inverse:["基础权重与波动率的倒数成正比，归一化后权重合计为 100%。"],
+    erc:["使用估计协方差求解等风险贡献权重，使入选资产各自承担相近的组合风险。"],
+    minvar:["用估计协方差最小化组合方差 wᵀΣw，入选资产权重非负且合计为 100%。"],
+    score:["先计算 max(得分, 0) ÷ 波动率，再归一化为基础权重。"],
+    rank:["得分越高，名次对应的风险预算越大。并列得分使用平均名次，再按预算求解权重。"]
+  },
+  scale:{
+    fixed:["按基础权重执行，总仓位受上限约束。"],
+    reduce:["预测组合波动超过目标时按比例减仓，缩放倍数最多为 1，并受总仓位上限约束。"],
+    target:["按目标波动 ÷ 预测组合波动缩放基础权重，可减仓或加仓，并受总仓位上限约束。"]
+  }
+};
+
 function openDetails(row, key) {
-  const config = row.config, summary = tails(config)[key];
-  const notes = {
-    pool:() => pools[config.pool].groups.map(([name,members]) => name + " · " + members.map(([asset]) => asset).join("、")),
-    signal:() => [choices.signal[config.signal][1],choices.screen[config.screen][1],...(hasWindow(config) ? ["多窗口得分等权平均"] : [])],
-    risk:() => [choices.risk[config.risk][1]],
-    weight:() => [choices.weight[config.weight][0]],
-    scale:() => [choices.scale[config.scale][0],...(config.scale === "target" ? ["融资年利率 " + config.borrow + "%"] : [])]
+  const config = row.config;
+  const fields = [[layerNames[key],optionsFor(key)[config[key]]]];
+  const sections = [];
+  const notes = lines => {
+    const box = make("div","","detail-notes");
+    for (const line of lines) box.append(make("p",line));
+    sections.push(box);
   };
-  openText(row.name + " · " + layerNames[key],[
-    optionsFor(key)[config[key]],summary,...notes[key](),"公开版细项采用上述固定口径。"
-  ].join("\n"));
+  if (key === "pool") {
+    fields.push(["纳入资产",config.active.length + " / " + assetNames(config.pool).length + " 条"]);
+    const groups = make("div","","assets");
+    const active = new Set(config.active);
+    let index = 0;
+    for (const [name,members] of pools[config.pool].groups) {
+      const assets = make("div","","assets-items");
+      for (const [asset] of members) if (active.has(index++)) assets.append(make("span",asset,"asset"));
+      if (assets.childElementCount) groups.append(make("h4",name),assets);
+    }
+    sections.push(groups);
+  }
+  if (key === "signal") {
+    if (hasWindow(config)) fields.push(["回看窗口",windows[config.windows]]);
+    if (config.signal === "ema") fields.push(["均线窗口","20／60 日 EMA"]);
+    if (hasWindow(config) && config.windows === "multi") {
+      fields.push(["多窗口合成",config.blend === "votes" ? "跑赢现金的窗口占比" : "得分等权平均"]);
+    }
+    fields.push(["筛选",optionsFor("screen")[config.screen]]);
+    if (usesTop(config)) fields.push(["最多入选",config.topk + " 条"]);
+    notes(detailRules.signal[config.signal]);
+    notes(detailRules.screen[config.screen]);
+  }
+  if (key === "risk") notes(detailRules.risk[config.risk]);
+  if (key === "weight") {
+    fields.push(["信号到仓位",optionsFor("exposure")[config.exposure]]);
+    notes(detailRules.weight[config.weight]);
+  }
+  if (key === "scale") {
+    if (config.scale !== "fixed") fields.push(["目标波动（年化）",config.target + "%"]);
+    fields.push(
+      ["总仓位上限",(config.scale === "target" ? config.cap : 100) + "%"],
+      ["融资年利率",config.scale === "target" ? config.borrow + "%" : "不使用融资"],
+      ["月内风险动作",optionsFor("overlay")[config.overlay]],
+      ["调仓频率","月度"],
+      ["单边成本",coverage ? coverage.fee + " bp" : "等待结果版本加载"]
+    );
+    notes(detailRules.scale[config.scale]);
+    notes(["评价期首个交易日建仓，此后每月首个交易日调仓。信号和风险估计使用该资产池上一估值日的数据。"]);
+  }
+
+  let dialog = byId("detail-dialog");
+  if (!dialog) {
+    dialog = make("dialog");
+    dialog.id = "detail-dialog";
+    dialog.setAttribute("aria-labelledby","detail-title");
+    document.body.append(dialog);
+  }
+  const title = make("h3",row.name + " · " + layerNames[key]);
+  title.id = "detail-title";
+  const grid = make("dl","","editor-grid");
+  for (const [label,value] of fields) {
+    const field = make("div","","editor-field");
+    field.append(make("dt",label),make("dd",value,"detail-value"));
+    grid.append(field);
+  }
+  const actions = make("div","","actions editor-actions");
+  const close = rowButton("关闭",() => dialog.close());
+  close.autofocus = true;
+  actions.append(close);
+  dialog.replaceChildren(title,grid,...sections,actions);
+  dialog.showModal();
 }
 
 function openText(title, value) {
