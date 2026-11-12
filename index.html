@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.trycloudflare.com; img-src 'self'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>多资产投资组合 · 五层策略对比</title>
 <style>
@@ -173,15 +173,13 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
         <tbody id="strategy-rows"></tbody>
       </table>
     </div>
-    <div class="panel-foot"><p class="help">主选项改动后自动回测该行。详细参数在「明细」里编辑，点应用后生效。<span class="mobile-table-hint"> 窄屏可横向滚动策略表。</span></p></div>
+    <div class="panel-foot"><p class="help">改动 A–E 主选项后，自动切换该行的日频回测结果。首次使用某个资产池需下载结果。「明细」可查看采用的细项。<span class="mobile-table-hint"> 窄屏可横向滚动策略表。</span></p></div>
   </section>
   <section class="panel" id="backtest-results" aria-labelledby="results-title">
     <div class="compare-head">
-    <div class="panel-head"><div><h2 id="results-title">回测对比</h2><p class="help">服务端计算 · 同一评价期与成本 · 日频含费结算</p></div></div>
+    <div class="panel-head"><div><h2 id="results-title">回测对比</h2><p class="help">预计算结果 · 固定评价期与成本</p></div></div>
     <div class="shared" aria-label="共用回测设置">
-      <label>起始交易日<input type="date" id="start-date" value="2018-02-01"></label>
-      <label>结束交易日<input type="date" id="end-date" value="2026-09-10"></label>
-      <label>单边成本（bp）<input type="number" id="fee" min="0" max="100" step="0.5" value="5" required></label>
+      <p class="help">评价期 <strong>2018-02-01 至 2026-09-10</strong> · 单边成本 <strong>5 bp</strong></p>
       <p class="shared-status" id="run-status" role="status"></p>
     </div>
     </div>
@@ -191,12 +189,12 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
         <div class="legend" id="legend" aria-label="曲线图例"></div>
         <h3 class="plot-title">日频含费净值</h3>
         <div class="plot-host" id="nav-host">
-          <canvas id="nav-curve" tabindex="0" role="img" aria-label="各方案日频含费净值。聚焦后用左右方向键逐日查看。"></canvas>
+          <canvas id="nav-curve" tabindex="0" role="img" aria-label="各方案含费净值。聚焦后用左右方向键逐日查看。"></canvas>
           <div class="chart-tt" id="chart-tip" hidden></div>
         </div>
         <h3 class="plot-title">日频回撤</h3>
         <div class="plot-host" id="dd-host">
-          <canvas id="dd-curve" tabindex="0" role="img" aria-label="各方案日频回撤。聚焦后用左右方向键逐日查看。"></canvas>
+          <canvas id="dd-curve" tabindex="0" role="img" aria-label="各方案回撤。聚焦后用左右方向键逐日查看。"></canvas>
         </div>
         <div class="zoom">
           <div class="zoom-track" id="zoom-track" aria-label="两图共用时间范围">
@@ -220,26 +218,19 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
   <details id="support" class="support">
     <summary>F 回测口径</summary>
     <ul>
-      <li>服务端按三套资产池的共同评价区间运行。可选日期为 <span id="coverage"></span>。</li>
-      <li>起止日期均须为共同交易日，含首尾两日。曲线在起始日前额外标出净值为 1 的基准点。净值和回撤均使用含费结果。最大回撤按完整评价期的连续历史峰值计算。</li>
+      <li>三套资产池的统一评价期为 <span id="coverage"></span>，含首尾估值日，曲线额外显示起始日前净值为 1 的基准点。图表下方的时间范围控件只调整显示区间。</li>
+      <li>净值和回撤均使用含费结果。最大回撤按完整评价期的连续历史峰值计算。</li>
       <li>年化双边换手按实际买卖额合计占成交前净值的比例逐日加总，再按日历天数年化，含初次建仓。</li>
     </ul>
   </details>
 </main>
-<dialog id="detail-dialog" aria-labelledby="detail-title">
-  <form id="detail-form">
-    <h3 id="detail-title"></h3>
-    <div class="editor-grid" id="editor-grid"></div>
-    <p class="editor-error" id="editor-error" role="status"></p>
-    <div class="actions editor-actions"><button class="button" type="button" id="cancel-detail">取消</button><button class="button primary" type="submit">应用并回测此行</button></div>
-  </form>
-</dialog>
 <dialog id="text-dialog" aria-labelledby="text-title"><form method="dialog">
   <h3 id="text-title"></h3>
   <textarea readonly aria-label="待复制内容" spellcheck="false"></textarea>
   <div class="actions"><button class="button primary" type="button" id="copy-text">复制文本</button><button class="button" type="submit">关闭</button><p class="help" id="copy-status" role="status"></p></div>
 </form></dialog>
-<noscript><p>请启用浏览器 JavaScript 以运行回测。</p></noscript>
-<script src="./app.js?v=trading-days" defer></script>
+<noscript><p>请启用浏览器 JavaScript 以查看交互回测结果。</p></noscript>
+<script src="./app.js?v=f3bc927e0b2ce51a" defer></script>
 </body>
 </html>
+

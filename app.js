@@ -1,6 +1,4 @@
 "use strict";
-const exactTradingDates = document.getElementById("start-date").type === "date";
-const dailyCharts = exactTradingDates || Boolean(document.querySelector('script[src="./app.js?v=daily"]'));
 const pools = {
   "carri2": {
     "groups": [
@@ -442,7 +440,7 @@ function makeComparisonChart() {
     for (const panel of panels) drawPanel(panel);
     tooltip.hidden = active === null;
     if (active !== null && pointerPanel.plot) {
-      tooltip.replaceChildren(make("strong",rows[active].date + (dailyCharts ? " · 净值 / 回撤" : " · 月末净值 / 月内最深回撤")));
+      tooltip.replaceChildren(make("strong",rows[active].date + " · 净值 / 回撤"));
       for (const item of series) {
         const point = item.points[active], entry = make("div","","tip-row");
         const title = make("span",item.name,"tip-name");
@@ -540,7 +538,7 @@ function marker(color) {
   return dot;
 }
 const pct = value => (100 * value).toFixed(2) + "%";
-const coverage = exactTradingDates ? {start:"2018-02-01",end:"2026-09-10"} : {start:"2018-02",end:"2026-09"};
+const coverage = Object.freeze({"start":"2018-02-01","end":"2026-09-10","fee":5});
 const assetNames = pool => pools[pool].groups.flatMap(([,members]) => members.map(([name]) => name));
 const allIndexes = pool => assetNames(pool).map((_,i) => i);
 const layerNames = {pool:"A 资产池", signal:"B 信号", risk:"C 风险建模", weight:"D 资本配置", scale:"E 交易执行"};
@@ -561,7 +559,7 @@ const strategies = [];
 const pending = new Set();
 const colors = ["#102c45","#0a7c78","#ad742a","#526b9b","#944d75","#58824d","#985340","#437b9b","#827245"];
 const chart = makeComparisonChart();
-let nextId = 1, timer = 0, evaluation = null, editing = null;
+let nextId = 1, timer = 0;
 
 function hasWindow(config) { return !["none","ema"].includes(config.signal); }
 function voteEligible(config) { return config.signal === "momentum" && config.windows === "multi"; }
@@ -619,7 +617,7 @@ function rowButton(label, action) {
 function newStrategy(name, config, result = null) {
   const id = nextId++;
   const color = colors[(id - 1) % colors.length];
-  const row = {id,name,color,config:normalize(structuredClone(config)),visible:true,result,runs:0,revision:0,request:null,error:"",busy:false,cells:{}};
+  const row = {id,name,color,config:normalize(structuredClone(config)),visible:true,result,runs:0,revision:0,error:"",busy:false,cells:{}};
   const tr = make("tr");
   tr.dataset.row = id;
   row.node = tr;
@@ -658,7 +656,7 @@ function newStrategy(name, config, result = null) {
     const edit = make("button","明细","link-button");
     edit.type = "button";
     edit.dataset.detail = key;
-    edit.addEventListener("click",() => openEditor(row,key));
+    edit.addEventListener("click",() => openDetails(row,key));
     tail.append(hint,edit);
     td.append(select,tail);
     tr.append(td);
@@ -673,7 +671,6 @@ function newStrategy(name, config, result = null) {
   if (id !== 1) actions.append(rowButton("删除",() => {
     pending.delete(row);
     row.revision++;
-    row.request?.abort();
     strategies.splice(strategies.indexOf(row),1);
     tr.remove();
     renderComparison();
@@ -701,7 +698,7 @@ function syncRow(row) {
     cell.td.dataset.changed = row !== strategies[0] && layerValue(row.config,key) !== layerValue(strategies[0].config,key);
   }
   row.status.dataset.state = row.error ? "error" : "";
-  const status = row.error || (row.busy ? "回测中…" : row.result ? "已回测" : "待回测");
+  const status = row.error || (row.busy ? "加载中…" : row.result ? "结果已加载" : "待加载");
   row.status.textContent = (row.id === 1 ? "基准 · " : "") + status;
   row.retry.hidden = !row.error;
 }
@@ -725,19 +722,9 @@ function duplicateRow(source) {
   else renderComparison();
 }
 
-function sharedSettings() {
-  const start = byId("start-date").value, end = byId("end-date").value, fee = byId("fee").valueAsNumber;
-  if (!start || !end || start < coverage.start || end > coverage.end || start >= end) {
-    throw new Error(exactTradingDates ? "请选择共同覆盖范围内的起止交易日，起始日期须早于结束日期。" : "请选择共同覆盖范围内至少两个月。");
-  }
-  if (!Number.isFinite(fee) || fee < 0 || fee > 100) throw new Error("单边成本请输入 0–100 bp。");
-  return {start,end,fee};
-}
 function queue(rows) {
   for (const row of rows) {
     row.revision++;
-    row.request?.abort();
-    row.request = null;
     pending.add(row);
     row.busy = true;
     row.error = "";
@@ -751,66 +738,49 @@ function queue(rows) {
 function flush() {
   const batch = [...pending];
   pending.clear();
-  try {
-    evaluation = sharedSettings();
-  } catch (error) {
-    evaluation = null;
-    for (const row of batch) {
-      row.busy = false;
-      row.error = error.message;
-      syncRow(row);
-    }
-    renderComparison(error.message);
-    return;
-  }
-  for (const row of batch) void runRow(row,evaluation);
+  for (const row of batch) void runRow(row);
 }
-let routeRequest;
-async function backtestEndpoint() {
-  if (!routeRequest) {
-    const url = new URL("./endpoint.json", window.location.href);
-    url.searchParams.set("v", Math.floor(Date.now() / 60000));
-    routeRequest = fetch(url, {cache:"no-store", credentials:"omit", signal:AbortSignal.timeout(8000)})
-      .then(async response => {
-        if (!response.ok) throw new Error("暂时无法读取回测入口，请稍后重试。");
-        const {origin} = await response.json();
-        if (typeof origin !== "string" || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) {
-          throw new Error("本机回测入口尚未配置，请稍后重试。");
-        }
-        return origin + (dailyCharts ? "/api/backtest?view=daily" : "/api/backtest") + (exactTradingDates ? "&dates=exact" : "");
-      })
-      .finally(() => { routeRequest = null; });
-  }
-  return routeRequest;
-}
-async function runRow(row, settings) {
-  const revision = row.revision, controller = new AbortController();
-  row.request = controller;
-  try {
-    const body = JSON.stringify({...row.config,...settings});
-    const endpoint = await backtestEndpoint();
-    const response = await fetch(endpoint,{
-      method:"POST",headers:{"Content-Type":"application/json"},credentials:"omit",
-      body,signal:AbortSignal.any([controller.signal,AbortSignal.timeout(25000)])
+
+const resultPrefix = "./results-f3bc927e0b2ce51a-";
+const poolRequests = new Map();
+
+function loadPool(pool) {
+  if (!poolRequests.has(pool)) {
+    const request = fetch(resultPrefix + pool + ".json.gz",{
+      credentials:"omit",signal:AbortSignal.timeout(60000)
+    }).then(response => {
+      if (!response.ok || !response.body) throw new Error("无法下载资产池结果。");
+      const body = response.body.pipeThrough(new DecompressionStream("gzip"));
+      return new Response(body).json();
+    }).catch(error => {
+      poolRequests.delete(pool);
+      throw error;
     });
-    if (!response.headers.get("content-type")?.startsWith("application/json")) {
-      throw new Error("本机回测服务暂时不可达，请稍后重试。");
-    }
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "回测请求未成功。");
+    poolRequests.set(pool,request);
+  }
+  return poolRequests.get(pool);
+}
+
+async function runRow(row) {
+  const revision = row.revision;
+  const {pool,signal,risk,weight,scale} = row.config;
+  try {
+    const {dates,results} = await loadPool(pool);
     if (row.revision !== revision) return;
+    const data = results[signal + "-" + risk]?.[weight]?.[scale];
+    if (!data || dates.length !== data.nav.length || dates.length !== data.drawdown.length) {
+      throw new Error("该组合的结果文件不完整，请重试。");
+    }
     row.result = {
-      rows:data.dates.map((date,i) => ({date,nav:data.nav[i],dd:data.drawdown[i]})),
+      rows:dates.map((date,i) => ({date,nav:data.nav[i],dd:data.drawdown[i]})),
       cagr:data.metrics.annualReturn,vol:data.metrics.annualVolatility,
       mdd:data.metrics.maxDrawdown,turnover:data.metrics.annualTurnover
     };
     row.runs++;
-  } catch (error) {
-    if (row.revision !== revision) return;
-    row.error = error instanceof TypeError || error.name === "TimeoutError" ? "本机回测服务暂时不可达，请稍后重试。" : error.message;
+  } catch {
+    if (row.revision === revision) row.error = "暂时无法读取预计算结果，请重试。";
   } finally {
     if (row.revision === revision) {
-      row.request = null;
       row.busy = false;
       syncRow(row);
       renderComparison();
@@ -818,20 +788,19 @@ async function runRow(row, settings) {
   }
 }
 
-function renderComparison(settingsError = "") {
+function renderComparison() {
   const selected = strategies.filter(row => row.visible);
   const complete = selected.filter(row => row.result);
   const busy = strategies.filter(row => row.busy).length;
   const errors = selected.filter(row => row.error).length;
   const note = byId("run-status");
-  note.dataset.error = Boolean(settingsError);
-  note.textContent = settingsError || (busy ? busy + " 行正在回测" : evaluation ?
-    evaluation.start + " 至 " + evaluation.end + " · " + complete.length + " 套已选方案" + (errors ? " · " + errors + " 行需检查" : "") : "");
+  note.textContent = busy ? busy + " 行正在加载" :
+    complete.length + " 套已选方案" + (errors ? " · " + errors + " 行待重试" : "");
   byId("comparison-body").hidden = complete.length === 0;
   const empty = byId("empty-state");
   empty.hidden = complete.length > 0;
   empty.textContent = !selected.length ? "勾选策略行左侧的「对比」以显示曲线。" :
-    busy ? "正在计算所选方案的净值与回撤…" : "请检查所选方案的回测设置。";
+    busy ? "正在加载所选方案的净值与回撤…" : "请重试加载所选方案。";
   byId("legend").replaceChildren(...complete.map(row => {
     const item = make("span","","legend-item");
     item.dataset.series = row.id;
@@ -852,112 +821,19 @@ function renderComparison(settingsError = "") {
   if (complete.length) chart.setSeries(complete);
 }
 
-const dialog = byId("detail-dialog");
-function openEditor(row, key) {
-  editing = {row,key,draft:structuredClone(row.config)};
-  byId("detail-title").textContent = row.name + " · " + layerNames[key];
-  byId("editor-error").textContent = "";
-  renderEditor();
-  dialog.showModal();
+function openDetails(row, key) {
+  const config = row.config, summary = tails(config)[key];
+  const notes = {
+    pool:() => pools[config.pool].groups.map(([name,members]) => name + " · " + members.map(([asset]) => asset).join("、")),
+    signal:() => [choices.signal[config.signal][1],choices.screen[config.screen][1],...(hasWindow(config) ? ["多窗口得分等权平均"] : [])],
+    risk:() => [choices.risk[config.risk][1]],
+    weight:() => [choices.weight[config.weight][0]],
+    scale:() => [choices.scale[config.scale][0],...(config.scale === "target" ? ["融资年利率 " + config.borrow + "%"] : [])]
+  };
+  openText(row.name + " · " + layerNames[key],[
+    optionsFor(key)[config[key]],summary,...notes[key](),"公开版细项采用上述固定口径。"
+  ].join("\n"));
 }
-function renderEditor(focusKey) {
-  const {draft,key} = editing;
-  const grid = byId("editor-grid");
-  grid.replaceChildren();
-  function editorSelect(field, label, options, numeric = false) {
-    const select = makeOptions(make("select"),options);
-    select.dataset.setting = field;
-    select.value = draft[field];
-    for (const option of select.options) option.disabled = !allowed(draft,field,option.value);
-    const wrapper = make("label",label,"editor-field");
-    wrapper.append(select);
-    grid.append(wrapper);
-    select.addEventListener("change",() => {
-      draft[field] = numeric ? +select.value : select.value;
-      if (field === "pool") draft.active = allIndexes(draft.pool);
-      normalize(draft);
-      renderEditor(field);
-    });
-  }
-  function editorNumber(field, label, min, max, step) {
-    const input = make("input");
-    Object.assign(input,{type:"number",min,max,step,required:true});
-    input.value = Number.isFinite(draft[field]) ? draft[field] : "";
-    input.dataset.setting = field;
-    const wrapper = make("label",label,"editor-field");
-    wrapper.append(input);
-    grid.append(wrapper);
-    input.addEventListener("input",() => { draft[field] = input.valueAsNumber; });
-  }
-  function noteFor(field) {
-    const info = choices[field][draft[field]];
-    grid.append(make("p",info[0] + " · " + info[1],"detail-notes"));
-  }
-  editorSelect(key,layerNames[key],optionsFor(key));
-  if (key === "pool") {
-    const pool = pools[draft.pool];
-    const box = make("div","","assets");
-    box.append(make("p","勾选本方案参与计算的资产。","help"));
-    let i = 0;
-    for (const [group,members] of pool.groups) {
-      box.append(make("h4",group));
-      const list = make("div","","assets-items");
-      for (const [name] of members) {
-        const index = i++;
-        const label = make("label","","asset"), checkbox = make("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = draft.active.includes(index);
-        checkbox.addEventListener("change",() => {
-          const next = new Set(draft.active);
-          if (checkbox.checked) next.add(index);
-          else next.delete(index);
-          draft.active = [...next].sort((a,b) => a - b);
-          normalize(draft);
-        });
-        label.append(checkbox,make("span",name));
-        list.append(label);
-      }
-      box.append(list);
-    }
-    grid.append(box);
-  } else if (key === "signal") {
-    if (hasWindow(draft)) editorSelect("windows","回看窗口",windows);
-    if (voteEligible(draft)) editorSelect("blend","多窗口合成",{mean:"得分等权平均",votes:"跑赢现金的窗口占比"});
-    editorSelect("screen","筛选",optionsFor("screen"));
-    if (usesTop(draft)) editorSelect("topk","最多入选",Object.fromEntries(draft.active.map((_,i) => [i + 1,(i + 1) + " 条"])),true);
-    noteFor("signal");
-    noteFor("screen");
-  } else if (key === "risk") {
-    noteFor("risk");
-  } else if (key === "weight") {
-    editorSelect("exposure","信号到仓位",optionsFor("exposure"));
-    if (draft.exposure !== "keep") editorSelect("funds","减出的资金",optionsFor("funds"));
-    noteFor("weight");
-    noteFor("exposure");
-  } else {
-    if (draft.scale !== "fixed") editorNumber("target","目标波动（年化 %）",0.5,30,0.1);
-    if (draft.scale === "target") {
-      editorNumber("cap","总仓位上限（%）",100,200,1);
-      editorNumber("borrow","融资年利率（%）",0,20,0.1);
-    }
-    editorSelect("overlay","月内风险动作",optionsFor("overlay"));
-    noteFor("scale");
-    noteFor("overlay");
-  }
-  if (focusKey) grid.querySelector('[data-setting="' + focusKey + '"]')?.focus();
-}
-byId("detail-form").addEventListener("submit",event => {
-  event.preventDefault();
-  const {row,draft} = editing;
-  if (!draft.active.length) {
-    byId("editor-error").textContent = "请至少勾选一条风险资产。";
-    return;
-  }
-  updateConfig(row,draft);
-  dialog.close();
-});
-byId("cancel-detail").addEventListener("click",() => dialog.close());
-dialog.addEventListener("close",() => { editing = null; });
 
 function openText(title, value) {
   const dialog = byId("text-dialog"), field = dialog.querySelector("textarea");
@@ -983,21 +859,10 @@ function openConfig(row) {
   const c = row.config, notes = tails(c);
   const lines = primary.map(key => layerNames[key] + " · " + optionsFor(key)[c[key]] + " · " + notes[key]);
   const names = assetNames(c.pool);
-  let settings;
-  try {
-    const current = sharedSettings();
-    settings = current.start + " 至 " + current.end + " · 单边成本 " + current.fee + " bp";
-  } catch {
-    settings = "共同评价日期或成本待填写。";
-  }
+  const settings = coverage.start + " 至 " + coverage.end + " · 单边成本 " + coverage.fee + " bp";
   openText(row.name + " · 策略配置",[row.name,settings,...lines,"纳入资产 " + c.active.map(i => names[i]).join("、"),
     ...(c.scale === "target" ? ["融资年利率 " + c.borrow + "%"] : [])].filter(Boolean).join("\n"));
 }
-for (const id of ["start-date","end-date"]) {
-  byId(id).min = coverage.start;
-  byId(id).max = coverage.end;
-}
-for (const id of ["start-date","end-date","fee"]) byId(id).addEventListener("input",() => queue(strategies));
 byId("copy-baseline").addEventListener("click",() => duplicateRow(strategies[0]));
 function openSupport() {
   if (location.hash === "#support") {
@@ -1012,5 +877,6 @@ newStrategy("基准方案",firstConfig);
 newStrategy("配权对照",{...firstConfig,weight:"equal"});
 queue(strategies);
 openSupport();
+
 
 
