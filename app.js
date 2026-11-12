@@ -574,6 +574,10 @@ function allowed(config, key, value) {
   return true;
 }
 function normalize(config) {
+  config.blend = "mean";
+  config.screen = config.signal === "none" ? "all" : "positiveTop";
+  config.windows = hasWindow(config) && config.windows === "60" ? "60" : "multi";
+  config.topk = config.signal !== "none" && config.topk === 5 ? 5 : 3;
   if (!voteEligible(config)) config.blend = "mean";
   for (const [key, fallback] of Object.entries({screen:"all", weight:"equal", exposure:"keep"})) {
     if (!allowed(config,key,config[key])) config[key] = fallback;
@@ -741,17 +745,62 @@ function flush() {
   for (const row of batch) void runRow(row);
 }
 
-const resultPrefix = "./results-f3bc927e0b2ce51a-";
+function signalResultKey({signal,windows,topk,risk}) {
+  return [signal,hasWindow({signal}) ? windows : "fixed",signal === "none" ? 0 : topk,risk].join("-");
+}
+
+function drawdownCurve(nav) {
+  let peak = 1;
+  return nav.map(value => {
+    peak = Math.max(peak,value);
+    return value / peak - 1;
+  });
+}
+
+function decodeNavPack(arrayBuffer) {
+  if (!(arrayBuffer instanceof ArrayBuffer) || arrayBuffer.byteLength < 4) {
+    throw new Error("结果包头部不完整。");
+  }
+  const bytes = new Uint8Array(arrayBuffer);
+  const metadataLength = new DataView(arrayBuffer).getUint32(0,true);
+  const dataStart = 4 + metadataLength;
+  if (!metadataLength || dataStart > bytes.length) throw new Error("结果包元数据长度无效。");
+  const {dates,results} = JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes.subarray(4,dataStart)));
+  if (!Array.isArray(dates) || !dates.length || !results || typeof results !== "object" || Array.isArray(results)) {
+    throw new Error("结果包缺少交易日历或配置索引。");
+  }
+  const pointCount = dates.length;
+  const planeLength = (bytes.length - dataStart) / 8;
+  const curveCount = planeLength / pointCount;
+  if (!Number.isSafeInteger(curveCount) || curveCount < 1) throw new Error("结果包净值数据长度无效。");
+
+  function readNav(curve) {
+    if (!Number.isSafeInteger(curve) || curve < 0 || curve >= curveCount) {
+      throw new Error("结果包净值索引超出范围。");
+    }
+    const nav = new Array(pointCount);
+    const value = new DataView(new ArrayBuffer(8));
+    const curveStart = dataStart + curve * pointCount;
+    for (let date = 0; date < pointCount; date++) {
+      for (let byte = 0; byte < 8; byte++) value.setUint8(byte,bytes[curveStart + date + byte * planeLength]);
+      nav[date] = value.getFloat64(0,true);
+    }
+    return nav;
+  }
+
+  return {dates,results,readNav};
+}
+
 const poolRequests = new Map();
 
 function loadPool(pool) {
   if (!poolRequests.has(pool)) {
-    const request = fetch(resultPrefix + pool + ".json.gz",{
+    const request = Promise.resolve("./results-926f0c5dd5712644-" + pool + ".bin.gz").then(url => fetch(url,{
       credentials:"omit",signal:AbortSignal.timeout(60000)
-    }).then(response => {
+    })).then(response => {
       if (!response.ok || !response.body) throw new Error("无法下载资产池结果。");
       const body = response.body.pipeThrough(new DecompressionStream("gzip"));
-      return new Response(body).json();
+      return new Response(body).arrayBuffer().then(decodeNavPack);
     }).catch(error => {
       poolRequests.delete(pool);
       throw error;
@@ -763,16 +812,18 @@ function loadPool(pool) {
 
 async function runRow(row) {
   const revision = row.revision;
-  const {pool,signal,risk,weight,scale} = row.config;
+  const {pool,weight,scale} = row.config;
   try {
-    const {dates,results} = await loadPool(pool);
+    const {dates,results,readNav} = await loadPool(pool);
     if (row.revision !== revision) return;
-    const data = results[signal + "-" + risk]?.[weight]?.[scale];
-    if (!data || dates.length !== data.nav.length || dates.length !== data.drawdown.length) {
+    const data = results[signalResultKey(row.config)]?.[weight]?.[scale];
+    if (!data) {
       throw new Error("该组合的结果文件不完整，请重试。");
     }
+    const nav = readNav(data.curve);
+    const drawdown = drawdownCurve(nav);
     row.result = {
-      rows:dates.map((date,i) => ({date,nav:data.nav[i],dd:data.drawdown[i]})),
+      rows:dates.map((date,i) => ({date,nav:nav[i],dd:drawdown[i]})),
       cagr:data.metrics.annualReturn,vol:data.metrics.annualVolatility,
       mdd:data.metrics.maxDrawdown,turnover:data.metrics.annualTurnover
     };
@@ -857,6 +908,7 @@ const detailRules = {
 };
 
 function openDetails(row, key) {
+  if (key === "signal") return openSignalEditor(row);
   const config = row.config;
   const fields = [[layerNames[key],optionsFor(key)[config[key]]]];
   const sections = [];
@@ -876,17 +928,6 @@ function openDetails(row, key) {
       if (assets.childElementCount) groups.append(make("h4",name),assets);
     }
     sections.push(groups);
-  }
-  if (key === "signal") {
-    if (hasWindow(config)) fields.push(["回看窗口",windows[config.windows]]);
-    if (config.signal === "ema") fields.push(["均线窗口","20／60 日 EMA"]);
-    if (hasWindow(config) && config.windows === "multi") {
-      fields.push(["多窗口合成",config.blend === "votes" ? "跑赢现金的窗口占比" : "得分等权平均"]);
-    }
-    fields.push(["筛选",optionsFor("screen")[config.screen]]);
-    if (usesTop(config)) fields.push(["最多入选",config.topk + " 条"]);
-    notes(detailRules.signal[config.signal]);
-    notes(detailRules.screen[config.screen]);
   }
   if (key === "risk") notes(detailRules.risk[config.risk]);
   if (key === "weight") {
@@ -929,6 +970,82 @@ function openDetails(row, key) {
   dialog.showModal();
 }
 
+function openSignalEditor(row) {
+  const config = row.config;
+  let dialog = byId("detail-dialog");
+  if (!dialog) {
+    dialog = make("dialog");
+    dialog.id = "detail-dialog";
+    dialog.setAttribute("aria-labelledby","detail-title");
+    document.body.append(dialog);
+  }
+
+  const title = make("h3",row.name + " · " + layerNames.signal);
+  title.id = "detail-title";
+  const form = make("form");
+  const grid = make("div","","editor-grid");
+  const field = (label, value) => {
+    const wrapper = make("div","","editor-field");
+    wrapper.append(make("span",label),make("span",value,"detail-value"));
+    grid.append(wrapper);
+    return wrapper;
+  };
+  const selectField = (label, options, selected) => {
+    const wrapper = make("label","","editor-field");
+    const select = make("select","","detail-value");
+    for (const [value,text] of options) select.append(new Option(text,value));
+    select.value = selected;
+    wrapper.append(make("span",label),select);
+    grid.append(wrapper);
+    return select;
+  };
+
+  field(layerNames.signal,optionsFor("signal")[config.signal]);
+  let windowSelect, topkSelect;
+  if (hasWindow(config)) {
+    windowSelect = selectField("回看窗口",[
+      ["multi",windows.multi + "等权合成"],["60",windows["60"]]
+    ],config.windows);
+    const blend = field("多窗口合成","得分等权平均");
+    blend.hidden = windowSelect.value !== "multi";
+    windowSelect.addEventListener("change",() => { blend.hidden = windowSelect.value !== "multi"; });
+  } else if (config.signal === "ema") {
+    field("均线窗口","20／60 日 EMA");
+  }
+  field("筛选",optionsFor("screen")[config.screen]);
+  if (config.signal !== "none") topkSelect = selectField("最多入选",[["3","3 条"],["5","5 条"]],String(config.topk));
+
+  form.append(grid);
+  for (const lines of [detailRules.signal[config.signal],detailRules.screen[config.screen]]) {
+    const box = make("div","","detail-notes");
+    for (const line of lines) box.append(make("p",line));
+    form.append(box);
+  }
+  const actions = make("div","","actions editor-actions");
+  const editable = Boolean(windowSelect || topkSelect);
+  const close = rowButton(editable ? "取消" : "关闭",() => dialog.close());
+  actions.append(close);
+  if (editable) {
+    const apply = make("button","应用","button primary");
+    apply.type = "submit";
+    actions.append(apply);
+    form.addEventListener("submit",event => {
+      event.preventDefault();
+      updateConfig(row,{
+        ...row.config,
+        windows:windowSelect?.value ?? config.windows,
+        topk:Number(topkSelect.value)
+      });
+      dialog.close();
+    });
+  }
+  (windowSelect ?? topkSelect ?? close).autofocus = true;
+  form.append(actions);
+  dialog.replaceChildren(title,form);
+  dialog.showModal();
+}
+
+
 function openText(title, value) {
   const dialog = byId("text-dialog"), field = dialog.querySelector("textarea");
   byId("text-title").textContent = title;
@@ -953,7 +1070,7 @@ function openConfig(row) {
   const c = row.config, notes = tails(c);
   const lines = primary.map(key => layerNames[key] + " · " + optionsFor(key)[c[key]] + " · " + notes[key]);
   const names = assetNames(c.pool);
-  const settings = coverage.start + " 至 " + coverage.end + " · 单边成本 " + coverage.fee + " bp";
+  const settings = coverage ? coverage.start + " 至 " + coverage.end + " · 单边成本 " + coverage.fee + " bp" : "结果版本待加载";
   openText(row.name + " · 策略配置",[row.name,settings,...lines,"纳入资产 " + c.active.map(i => names[i]).join("、"),
     ...(c.scale === "target" ? ["融资年利率 " + c.borrow + "%"] : [])].filter(Boolean).join("\n"));
 }

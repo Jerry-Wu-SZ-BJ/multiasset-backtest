@@ -151,6 +151,7 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
 }
 #detail-dialog .editor-grid { margin:0; }
 #detail-dialog .detail-value { margin:0; min-height:33px; padding:6px 9px; border:1px solid var(--line); border-radius:5px; background:var(--white); color:var(--ink); overflow-wrap:anywhere; }
+#detail-dialog select.detail-value { width:100%; }
 #detail-dialog .detail-notes,#detail-dialog .assets { margin-top:9px; }
 @media(max-width:460px) { #detail-dialog .editor-grid { grid-template-columns:1fr; } }
 </style>
@@ -177,7 +178,7 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
         <tbody id="strategy-rows"></tbody>
       </table>
     </div>
-    <div class="panel-foot"><p class="help">改动 A–E 主选项后，自动切换该行的日频回测结果。首次使用某个资产池需下载结果。「明细」可查看采用的细项。<span class="mobile-table-hint"> 窄屏可横向滚动策略表。</span></p></div>
+    <div class="panel-foot"><p class="help">改动 A–E 主选项后自动切换结果。B 信号可在「明细」调整适用参数，点「应用」更新该行。首次使用某个资产池需下载结果。<span class="mobile-table-hint"> 窄屏可横向滚动策略表。</span></p></div>
   </section>
   <section class="panel" id="backtest-results" aria-labelledby="results-title">
     <div class="compare-head">
@@ -234,7 +235,7 @@ dialog textarea { width:100%; min-height:215px; border:1px solid var(--line); pa
   <div class="actions"><button class="button primary" type="button" id="copy-text">复制文本</button><button class="button" type="submit">关闭</button><p class="help" id="copy-status" role="status"></p></div>
 </form></dialog>
 <noscript><p>请启用浏览器 JavaScript 以查看交互回测结果。</p></noscript>
-<script src="./app.js?v=574f1cbbab58cd26" defer></script>
+<script src="./app.js?v=926f0c5dd5712644" defer></script>
 </body>
 </html>
 
